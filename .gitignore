@@ -1,0 +1,13 @@
+
+# Ignore build files
+/build/
+*.o
+*.out
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore Python/Java/VSCode/CLion files etc (examples):
+*.log
+
