@@ -1,10 +1,17 @@
 
+# Ignore all files inside these directories
+highlighted_seams/*
+outputs/*
+
+# But not the directories themselves
+!highlighted_seams/
+!outputs/
+
 # Ignore build files
 /build/
 *.o
 *.out
-highlighted_seams/*
-outputs/*
+
 # Ignore system files
 .DS_Store
 Thumbs.db
