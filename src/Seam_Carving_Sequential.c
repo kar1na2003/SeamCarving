@@ -1,11 +1,6 @@
+#include "../include/Seam_Carving_Sequential.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <png.h>
-#include <math.h>
-
-unsigned char* read_png(const char* filename, int* width, int* height, int* channels) {
+unsigned char* read_png_sequential(const char* filename, int* width, int* height, int* channels) {
     FILE *fp = fopen(filename, "rb");
     if (!fp) {
         perror("File opening failed");
@@ -56,7 +51,7 @@ unsigned char* read_png(const char* filename, int* width, int* height, int* chan
     return image_data;
 }
 
-void write_png(const char* filename, unsigned char* image_data, int width, int height, int channels) {
+void write_png_sequential(const char* filename, unsigned char* image_data, int width, int height, int channels) {
     FILE* fp = fopen(filename, "wb");
     if (!fp) {
         perror("File opening failed");
@@ -106,7 +101,7 @@ void write_png(const char* filename, unsigned char* image_data, int width, int h
     png_destroy_write_struct(&png, &info);
 }
 
-void compute_energy_map(unsigned char* image_data, int width, int height, int channels, unsigned char* energy_map) {
+void compute_energy_map_sequential(unsigned char* image_data, int width, int height, int channels, unsigned char* energy_map) {
     int gx, gy;
     for (int y = 1; y < height - 1; y++) {
         for (int x = 1; x < width - 1; x++) {
@@ -127,7 +122,7 @@ void compute_energy_map(unsigned char* image_data, int width, int height, int ch
     }
 }
 
-void compute_seam(unsigned char* energy_map, int width, int height, int* seam) {
+void compute_seam_sequential(unsigned char* energy_map, int width, int height, int* seam) {
     int* dp = malloc(width * height * sizeof(int));
     int* backtrack = malloc(width * height * sizeof(int));
 
@@ -175,7 +170,7 @@ void compute_seam(unsigned char* energy_map, int width, int height, int* seam) {
     free(backtrack);
 }
 
-void highlight_seam(unsigned char* image_data, int width, int height, int channels, int* seam, const char* output_filename) {
+void highlight_seam_sequential(unsigned char* image_data, int width, int height, int channels, int* seam, const char* output_filename) {
     unsigned char* highlighted_image = malloc(width * height * channels);
     memcpy(highlighted_image, image_data, width * height * channels);
 
@@ -187,11 +182,11 @@ void highlight_seam(unsigned char* image_data, int width, int height, int channe
         highlighted_image[idx + 2] = 0;     
     }
 
-    write_png(output_filename, highlighted_image, width, height, channels);
+    write_png_sequential(output_filename, highlighted_image, width, height, channels);
     free(highlighted_image);
 }
 
-void remove_and_save_seam(unsigned char* image_data, int width, int height, int channels, int* seam, const char* output_filename) {
+void remove_and_save_seam_sequential(unsigned char* image_data, int width, int height, int channels, int* seam, const char* output_filename) {
     unsigned char* new_image_data = malloc((width - 1) * height * channels);
 
     for (int y = 0; y < height; ++y) {
@@ -208,55 +203,8 @@ void remove_and_save_seam(unsigned char* image_data, int width, int height, int 
         }
     }
 
-    write_png(output_filename, new_image_data, width - 1, height, channels);
+    write_png_sequential(output_filename, new_image_data, width - 1, height, channels);
     free(new_image_data);
 }
 
-int main() {
-    int width, height, channels;
-    unsigned char* image_data = read_png("input.png", &width, &height, &channels);
-    if (!image_data) {
-        printf("Failed to read image.\n");
-        return 1;
-    }
-
-    int iterations;
-    printf("Enter the number of iterations: ");
-    scanf("%d", &iterations);
-
-    system("mkdir -p energy_maps highlighted_seams outputs");
-
-    unsigned char* energy_map = malloc(width * height);
-    int* seam = malloc(height * sizeof(int));
-
-    char current_image_filename[256];
-    snprintf(current_image_filename, sizeof(current_image_filename), "input.png");
-
-    for (int i = 0; i < iterations; i++) {
-        image_data = read_png(current_image_filename, &width, &height, &channels);
-        if (!image_data) {
-            printf("Failed to read image: %s\n", current_image_filename);
-            return 1;
-        }
-
-        compute_energy_map(image_data, width, height, channels, energy_map);
-        compute_seam(energy_map, width, height, seam);
-
-        char highlighted_filename[256];
-        snprintf(highlighted_filename, sizeof(highlighted_filename), "highlighted_seams/seam_%d.png", i);
-        highlight_seam(image_data, width, height, channels, seam, highlighted_filename);
-
-        char output_filename[256];
-        snprintf(output_filename, sizeof(output_filename), "outputs/output_%d.png", i);
-        remove_and_save_seam(image_data, width, height, channels, seam, output_filename);
-
-        snprintf(current_image_filename, sizeof(current_image_filename), "outputs/output_%d.png", i);
-    }
-
-    free(image_data);
-    free(energy_map);
-    free(seam);
-
-    return 0;
-}
 

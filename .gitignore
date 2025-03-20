@@ -3,7 +3,8 @@
 /build/
 *.o
 *.out
-
+highlighted_seams/*
+outputs/*
 # Ignore system files
 .DS_Store
 Thumbs.db
