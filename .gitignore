@@ -1,7 +1,7 @@
 
 # Ignore all files inside these directories
-highlighted_seams/*
-outputs/*
+highlighted_seams/*.png
+outputs/*.png
 
 # But not the directories themselves
 !highlighted_seams/
