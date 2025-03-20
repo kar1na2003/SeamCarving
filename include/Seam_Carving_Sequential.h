@@ -3,6 +3,9 @@
 #include <string.h>
 #include <png.h>
 #include <math.h>
+#include <dirent.h>
+
+void delete_png_files_in_directory(const char* dir_path); 
 
 unsigned char* read_png_sequential(const char* filename, int* width, int* height, int* channels);
 

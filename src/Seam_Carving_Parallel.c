@@ -1,36 +1,6 @@
-#include "../include/Seam_Carving_Sequential.h"
-
-void delete_png_files_in_directory(const char* dir_path) {
-    DIR* dir = opendir(dir_path);
-    if (!dir) {
-        perror("opendir failed");
-        return;
-    }
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
-        // Check if the file has a .png extension
-        if (entry->d_type == DT_REG) {  // DT_REG is for regular files
-            // Get the full path of the file
-            char file_path[1024];
-            snprintf(file_path, sizeof(file_path), "%s/%s", dir_path, entry->d_name);
-
-            // Check if it's a PNG file
-            if (strstr(entry->d_name, ".png") != NULL) {
-                // Delete the file
-                if (remove(file_path) == 0) {
-                   // printf("Deleted: %s\n", file_path);
-                } else {
-                    perror("remove failed");
-                }
-            }
-        }
-    }
-
-    closedir(dir);
-}
-
-unsigned char* read_png_sequential(const char* filename, int* width, int* height, int* channels) {
+#include "../include/Seam_Carving_Parallel.h"
+// Function to parallelize reading the PNG image
+unsigned char* read_png_parallel(const char* filename, int* width, int* height, int* channels) {
     FILE *fp = fopen(filename, "rb");
     if (!fp) {
         perror("File opening failed");
@@ -81,62 +51,67 @@ unsigned char* read_png_sequential(const char* filename, int* width, int* height
     return image_data;
 }
 
-void write_png_sequential(const char* filename, unsigned char* image_data, int width, int height, int channels) {
-    FILE* fp = fopen(filename, "wb");
-    if (!fp) {
-        perror("File opening failed");
-        return;
-    }
+// Parallelize image writing using OpenMP
 
-    png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!png) {
-        perror("png_create_write_struct failed");
-        fclose(fp);
-        return;
-    }
+void write_png_parallel(const char* filename, unsigned char* image_data, int width, int height, int channels) {
+    // Lock to ensure only one thread writes to the file at a time
+    #pragma omp critical
+    {
+        FILE* fp = fopen(filename, "wb");
+        if (!fp) {
+            perror("File opening failed");
+            
+        }
 
-    png_infop info = png_create_info_struct(png);
-    if (!info) {
-        perror("png_create_info_struct failed");
-        fclose(fp);
-        png_destroy_write_struct(&png, NULL);
-        return;
-    }
+        png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+        if (!png) {
+            perror("png_create_write_struct failed");
+            fclose(fp);
+           
+        }
 
-    if (setjmp(png_jmpbuf(png))) {
-        perror("Error during PNG creation");
+        png_infop info = png_create_info_struct(png);
+        if (!info) {
+            perror("png_create_info_struct failed");
+            fclose(fp);
+            png_destroy_write_struct(&png, NULL);
+          
+        }
+
+        if (setjmp(png_jmpbuf(png))) {
+            perror("Error during PNG creation");
+            fclose(fp);
+            png_destroy_write_struct(&png, &info);
+        }
+
+        png_init_io(png, fp);
+        png_set_IHDR(png, info, width, height, 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_DEFAULT);
+        png_write_info(png, info);
+
+        png_bytep row = (png_byte*) malloc(3 * width * sizeof(png_byte));
+
+        #pragma omp parallel for
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                row[x * 3 + 0] = image_data[(y * width + x) * channels];     
+                row[x * 3 + 1] = image_data[(y * width + x) * channels + 1]; 
+                row[x * 3 + 2] = image_data[(y * width + x) * channels + 2]; 
+            }
+            png_write_row(png, row);
+        }
+
+        free(row);
+        png_write_end(png, NULL);
         fclose(fp);
         png_destroy_write_struct(&png, &info);
-        return;
     }
-
-    png_init_io(png, fp);
-    png_set_IHDR(png, info, width, height, 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_DEFAULT);
-    png_write_info(png, info);
-
-    png_bytep row = (png_byte*) malloc(3 * width * sizeof(png_byte));
-
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            row[x * 3 + 0] = image_data[(y * width + x) * channels];     
-            row[x * 3 + 1] = image_data[(y * width + x) * channels + 1]; 
-            row[x * 3 + 2] = image_data[(y * width + x) * channels + 2]; 
-        }
-        png_write_row(png, row);
-    }
-
-    free(row);
-    png_write_end(png, NULL);
-    fclose(fp);
-    png_destroy_write_struct(&png, &info);
 }
-
-void compute_energy_map_sequential(unsigned char* image_data, int width, int height, int channels, unsigned char* energy_map) {
-    int gx, gy;
+// Parallelize energy map computation using OpenMP
+void compute_energy_map_parallel(unsigned char* image_data, int width, int height, int channels, unsigned char* energy_map) {
+    #pragma omp parallel for collapse(2)
     for (int y = 1; y < height - 1; y++) {
         for (int x = 1; x < width - 1; x++) {
-            gx = 0;
-            gy = 0;
+            int gx = 0, gy = 0;
 
             for (int j = -1; j <= 1; j++) {
                 for (int i = -1; i <= 1; i++) {
@@ -152,15 +127,18 @@ void compute_energy_map_sequential(unsigned char* image_data, int width, int hei
     }
 }
 
-void compute_seam_sequential(unsigned char* energy_map, int width, int height, int* seam) {
+// Parallelize seam computation with OpenMP
+void compute_seam_parallel(unsigned char* energy_map, int width, int height, int* seam) {
     int* dp = malloc(width * height * sizeof(int));
     int* backtrack = malloc(width * height * sizeof(int));
 
+    #pragma omp parallel for
     for (int x = 0; x < width; x++) {
         dp[x] = energy_map[x];  
         backtrack[x] = -1;
     }
 
+    #pragma omp parallel for collapse(2)
     for (int y = 1; y < height; y++) {
         for (int x = 0; x < width; x++) {
             int min_energy = dp[(y - 1) * width + x];
@@ -184,6 +162,7 @@ void compute_seam_sequential(unsigned char* energy_map, int width, int height, i
     int min_energy = dp[(height - 1) * width];
     int best_x = 0;
 
+    #pragma omp parallel for
     for (int x = 1; x < width; x++) {
         if (dp[(height - 1) * width + x] < min_energy) {
             min_energy = dp[(height - 1) * width + x];
@@ -191,6 +170,7 @@ void compute_seam_sequential(unsigned char* energy_map, int width, int height, i
         }
     }
 
+    #pragma omp parallel for
     for (int y = height - 1; y >= 0; y--) {
         seam[y] = best_x;
         best_x = backtrack[y * width + best_x];
@@ -200,10 +180,12 @@ void compute_seam_sequential(unsigned char* energy_map, int width, int height, i
     free(backtrack);
 }
 
-void highlight_seam_sequential(unsigned char* image_data, int width, int height, int channels, int* seam, const char* output_filename) {
+// Parallelize seam highlighting with OpenMP
+void highlight_seam_parallel(unsigned char* image_data, int width, int height, int channels, int* seam, const char* output_filename) {
     unsigned char* highlighted_image = malloc(width * height * channels);
     memcpy(highlighted_image, image_data, width * height * channels);
 
+    #pragma omp parallel for
     for (int y = 0; y < height; ++y) {
         int seam_x = seam[y];
         int idx = (y * width + seam_x) * channels;
@@ -212,13 +194,15 @@ void highlight_seam_sequential(unsigned char* image_data, int width, int height,
         highlighted_image[idx + 2] = 0;     
     }
 
-    write_png_sequential(output_filename, highlighted_image, width, height, channels);
+    write_png_parallel(output_filename, highlighted_image, width, height, channels);
     free(highlighted_image);
 }
 
-void remove_and_save_seam_sequential(unsigned char* image_data, int width, int height, int channels, int* seam, const char* output_filename) {
+// Parallelize seam removal with OpenMP
+void remove_and_save_seam_parallel(unsigned char* image_data, int width, int height, int channels, int* seam, const char* output_filename) {
     unsigned char* new_image_data = malloc((width - 1) * height * channels);
 
+    #pragma omp parallel for
     for (int y = 0; y < height; ++y) {
         int seam_x = seam[y];
         for (int x = 0; x < seam_x; ++x) {
@@ -233,8 +217,7 @@ void remove_and_save_seam_sequential(unsigned char* image_data, int width, int h
         }
     }
 
-    write_png_sequential(output_filename, new_image_data, width - 1, height, channels);
+    write_png_parallel(output_filename, new_image_data, width - 1, height, channels);
     free(new_image_data);
 }
-
 
