@@ -1,4 +1,5 @@
 #include "../include/Seam_Carving_Parallel.h"
+
 // Function to parallelize reading the PNG image
 unsigned char* read_png_parallel(const char* filename, int* width, int* height, int* channels) {
     FILE *fp = fopen(filename, "rb");
@@ -38,21 +39,46 @@ unsigned char* read_png_parallel(const char* filename, int* width, int* height, 
 
     int rowbytes = png_get_rowbytes(png, info);
     unsigned char* image_data = malloc(rowbytes * (*height));
-    png_bytep* row_pointers = malloc(sizeof(png_bytep) * (*height));
+    if (!image_data) {
+        fclose(fp);
+        png_destroy_read_struct(&png, &info, NULL);
+        return NULL;
+    }
+
+    png_bytep* row_pointers_temp = malloc(sizeof(png_bytep) * (*height));
+    if (!row_pointers_temp) {
+        free(image_data);
+        fclose(fp);
+        png_destroy_read_struct(&png, &info, NULL);
+        return NULL;
+    }
+
     for (int y = 0; y < *height; y++)
-        row_pointers[y] = image_data + y * rowbytes;
+        row_pointers_temp[y] = malloc(rowbytes);
 
-    png_read_image(png, row_pointers);
+    png_read_image(png, row_pointers_temp);
 
+    // Parallel copy into contiguous image_data using OMP tasks
+    #pragma omp parallel
+    {
+        #pragma omp single nowait
+        for (int y = 0; y < *height; y++) {
+            #pragma omp task firstprivate(y)
+            {
+                memcpy(image_data + y * rowbytes, row_pointers_temp[y], rowbytes);
+                free(row_pointers_temp[y]);  // Free temporary row buffer
+            }
+        }
+    }
+
+    free(row_pointers_temp);
     fclose(fp);
     png_destroy_read_struct(&png, &info, NULL);
-    free(row_pointers);
 
     return image_data;
 }
 
 // Parallelize image writing using OpenMP
-
 void write_png_parallel(const char* filename, unsigned char* image_data, int width, int height, int channels) {
     // Lock to ensure only one thread writes to the file at a time
     #pragma omp critical
@@ -106,6 +132,7 @@ void write_png_parallel(const char* filename, unsigned char* image_data, int wid
         png_destroy_write_struct(&png, &info);
     }
 }
+
 // Parallelize energy map computation using OpenMP
 void compute_energy_map_parallel(unsigned char* image_data, int width, int height, int channels, unsigned char* energy_map) {
     #pragma omp parallel for collapse(2)

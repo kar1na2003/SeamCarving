@@ -1,5 +1,7 @@
+
 #include "../include/Seam_Carving_Sequential.h"
 
+// Deletes all PNG files in the specified directory
 void delete_png_files_in_directory(const char* dir_path) {
     DIR* dir = opendir(dir_path);
     if (!dir) {
@@ -9,17 +11,13 @@ void delete_png_files_in_directory(const char* dir_path) {
 
     struct dirent* entry;
     while ((entry = readdir(dir)) != NULL) {
-        // Check if the file has a .png extension
-        if (entry->d_type == DT_REG) {  // DT_REG is for regular files
-            // Get the full path of the file
+        if (entry->d_type == DT_REG) {
             char file_path[1024];
             snprintf(file_path, sizeof(file_path), "%s/%s", dir_path, entry->d_name);
 
-            // Check if it's a PNG file
             if (strstr(entry->d_name, ".png") != NULL) {
-                // Delete the file
                 if (remove(file_path) == 0) {
-                   // printf("Deleted: %s\n", file_path);
+                    // Successfully deleted PNG file
                 } else {
                     perror("remove failed");
                 }
@@ -30,6 +28,7 @@ void delete_png_files_in_directory(const char* dir_path) {
     closedir(dir);
 }
 
+// Reads a PNG file and returns the image data
 unsigned char* read_png_sequential(const char* filename, int* width, int* height, int* channels) {
     FILE *fp = fopen(filename, "rb");
     if (!fp) {
@@ -81,6 +80,7 @@ unsigned char* read_png_sequential(const char* filename, int* width, int* height
     return image_data;
 }
 
+// Writes image data to a PNG file
 void write_png_sequential(const char* filename, unsigned char* image_data, int width, int height, int channels) {
     FILE* fp = fopen(filename, "wb");
     if (!fp) {
@@ -131,6 +131,7 @@ void write_png_sequential(const char* filename, unsigned char* image_data, int w
     png_destroy_write_struct(&png, &info);
 }
 
+// Computes the energy map of an image based on pixel gradients
 void compute_energy_map_sequential(unsigned char* image_data, int width, int height, int channels, unsigned char* energy_map) {
     int gx, gy;
     for (int y = 1; y < height - 1; y++) {
@@ -152,6 +153,7 @@ void compute_energy_map_sequential(unsigned char* image_data, int width, int hei
     }
 }
 
+// Computes the seam (vertical path of minimum energy) for image resizing
 void compute_seam_sequential(unsigned char* energy_map, int width, int height, int* seam) {
     int* dp = malloc(width * height * sizeof(int));
     int* backtrack = malloc(width * height * sizeof(int));
@@ -200,6 +202,7 @@ void compute_seam_sequential(unsigned char* energy_map, int width, int height, i
     free(backtrack);
 }
 
+// Highlights the seam in the image by changing its color to red and saves the result
 void highlight_seam_sequential(unsigned char* image_data, int width, int height, int channels, int* seam, const char* output_filename) {
     unsigned char* highlighted_image = malloc(width * height * channels);
     memcpy(highlighted_image, image_data, width * height * channels);
@@ -216,6 +219,7 @@ void highlight_seam_sequential(unsigned char* image_data, int width, int height,
     free(highlighted_image);
 }
 
+// Removes the computed seam from the image and saves the result as a new PNG file
 void remove_and_save_seam_sequential(unsigned char* image_data, int width, int height, int channels, int* seam, const char* output_filename) {
     unsigned char* new_image_data = malloc((width - 1) * height * channels);
 
@@ -236,5 +240,4 @@ void remove_and_save_seam_sequential(unsigned char* image_data, int width, int h
     write_png_sequential(output_filename, new_image_data, width - 1, height, channels);
     free(new_image_data);
 }
-
 
